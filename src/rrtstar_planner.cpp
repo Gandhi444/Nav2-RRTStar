@@ -147,7 +147,7 @@ namespace nav2_rrtstar_planner
     unsigned int minx = width_cell, miny = height_cell, maxx = 0, maxy = 0;
     mPerCellX = width / width_cell;
     mPerCellY = height / height_cell;
-
+    int KNeig=5;
     for (int i = 0; i < width_cell; i++)
     {
       for (int j = 0; j < height_cell; j++)
@@ -183,7 +183,7 @@ namespace nav2_rrtstar_planner
     // int cost=costBeetweanPoints(Start.x,Start.y,End.x,End.y,encountered_obstacle);
     // RCLCPP_INFO(node_->get_logger(), "dist: %d obstacle: %d",cost,encountered_obstacle);
     //RCLCPP_INFO(node_->get_logger(), "Generating points");
-    for (int i = 0; i < 1000; i++)
+    for (int i = 0; i < 10000; i++)
     {
       double rX = unifX(re);
       double rY = unifY(re);
@@ -193,9 +193,10 @@ namespace nav2_rrtstar_planner
       {
         continue;
       }
-      int bestCost = INT_MAX;
-      int Closest = -1;
+      // int bestCost = INT_MAX;
+      // int Closest = -1;
       int iter = 0;
+      std::vector<std::pair<int,int>> bestNeighbours;
       for (auto &element : Verticies)
       {
         bool encountered_obstacle=false;
@@ -207,31 +208,63 @@ namespace nav2_rrtstar_planner
           continue;
         }
         double Totalcost = cost + element.Cost;
-        if (Totalcost < bestCost)
+        if (bestNeighbours.size()<KNeig)
         {
-          bestCost = Totalcost;
-          Closest = iter;
+          bestNeighbours.push_back(std::pair<int,int>(Totalcost,iter));
+          
+        }else if(Totalcost<bestNeighbours[KNeig].first)
+        {
+          bestNeighbours.pop_back();
+          bestNeighbours.push_back(std::pair<int,int>(Totalcost,iter));
+          sort(bestNeighbours.rbegin(),bestNeighbours.rend());
         }
+        // if (Totalcost < bestCost)
+        // {
+        //   bestCost = Totalcost;
+        //   Closest = iter;
+        // }
         iter++;
       }
-      if (Closest != -1)
+      if (bestNeighbours.size()!=0)
       {
-        Vertex NewVertex(rX, rY, bestCost, Closest);
+        Vertex NewVertex(rX, rY, bestNeighbours[0].first, bestNeighbours[0].second);
         Verticies.push_back(NewVertex);
-        bool encountered_obstacle=false;
-        int cost=costBeetweanPoints(rX,rY,End.x,End.y,encountered_obstacle);
+        bestNeighbours.erase(bestNeighbours.begin());
+        // for(auto &pair : bestNeighbours)
+        // {
+        //   Vertex currentVert=Verticies[pair.second];
+        //   bool encountered_obstacle=false;
+        //   int cost=costBeetweanPoints(rX,rY,currentVert.x,currentVert.y,encountered_obstacle);
+        //   if(encountered_obstacle)
+        //   {
+        //   continue;
+        //   }
+        //   double Totalcost = cost + NewVertex.Cost;
+        //   if(currentVert.Cost<Totalcost)
+        //   {
+        //     Verticies[pair.second].Cost=Totalcost;
+        //     Verticies[pair.second].Parent=Verticies.size()-1;
+        //   }
+        // }
+      }
+    }
+    for(int i=0; i<Verticies.size();i++)
+    {
+       Vertex currentVert=Verticies[i];
+       bool encountered_obstacle=false;
+       int cost=costBeetweanPoints(currentVert.x,currentVert.y,End.x,End.y,encountered_obstacle);
         if (encountered_obstacle)
         {
           continue;
         }
-        double Totalcost = cost + NewVertex.Cost;
+        double Totalcost = cost + currentVert.Cost;
         if (Totalcost < End.Cost)
         {
-          End.Parent = Verticies.size()-1;
+          End.Parent = i;
           End.Cost = Totalcost;
         }
-      }
     }
+
     // Vertex* currentPoint=&End;
     Vertex CurElement = End;
     RCLCPP_INFO(node_->get_logger(), "len (%ld)", Verticies.size());
@@ -249,13 +282,13 @@ namespace nav2_rrtstar_planner
                                      CurElement.y - nextElement.y) /interpolation_resolution_;
       double x_increment = (CurElement.x-nextElement.x) / total_number_of_loop;
       double y_increment = (CurElement.y-nextElement.y) / total_number_of_loop;
-      RCLCPP_INFO(node_->get_logger(), "Incrementx %f Incrementy %f loops %d",x_increment ,y_increment,total_number_of_loop);
+      //RCLCPP_INFO(node_->get_logger(), "Incrementx %f Incrementy %f loops %d",x_increment ,y_increment,total_number_of_loop);
       for (int i = 0; i < total_number_of_loop; ++i)
       {
         geometry_msgs::msg::PoseStamped pose;
         // RCLCPP_INFO(node_->get_logger(), "Poin (%f)",PrevElement.x + orgX + x_increment * i);
         pose.pose.position.x = CurElement.x + orgX - x_increment * i;
-        RCLCPP_INFO(node_->get_logger(), "positionx %f positiony %f",nextElement.x + orgX + x_increment * i ,nextElement.y + orgY + y_increment * i);
+        //RCLCPP_INFO(node_->get_logger(), "positionx %f positiony %f",nextElement.x + orgX + x_increment * i ,nextElement.y + orgY + y_increment * i);
         pose.pose.position.y = CurElement.y + orgY - y_increment * i;
         pose.pose.position.z = 0.0;
         pose.pose.orientation.x = 0.0;
@@ -267,14 +300,7 @@ namespace nav2_rrtstar_planner
         global_path.poses.push_back(pose);
       }
       CurElement = nextElement;
-      //RCLCPP_INFO(node_->get_logger(), "Counter (%d)", counter);
       counter++;
-    }
-    //path_idx.push_back(CurElement.Parent);
-    for (auto &element : path_idx)
-    {
-      Vertex Point=Verticies[element];
-      RCLCPP_INFO(node_->get_logger(), "Path (%d) X:%f Y:%f", element,Point.x+orgX,Point.y+orgY);
     }
     std::reverse(global_path.poses.begin(),global_path.poses.end());
     return global_path;
