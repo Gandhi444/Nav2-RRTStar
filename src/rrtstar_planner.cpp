@@ -59,7 +59,7 @@ namespace nav2_rrtstar_planner
     tf_ = tf;
     costmap_ = costmap_ros->getCostmap();
     global_frame_ = costmap_ros->getGlobalFrameID();
-    
+
     // Parameter initialization
     nav2_util::declare_parameter_if_not_declared(
         node_, name_ + ".interpolation_resolution", rclcpp::ParameterValue(0.1));
@@ -87,6 +87,34 @@ namespace nav2_rrtstar_planner
         node_->get_logger(), "Deactivating plugin %s of type NavfnPlanner",
         name_.c_str());
   }
+  int rrtstar::costBeetweanPoints(double x1, double y1, double x2, double y2, bool &encoutered_obstacle)
+  {
+    int total_number_of_loop = std::hypot(
+                                   x1 - x2, y1 - y2) /
+                               interpolation_resolution_;
+    double x_increment = (x1 - x2) / total_number_of_loop;
+    double y_increment = (y1 - y2) / total_number_of_loop;
+    double TotalCost = 0;
+    unsigned int prev_index = UINT_MAX;
+    for (int j = 0; j < total_number_of_loop; ++j)
+    {
+      double position_x = x2 + x_increment * j;
+      double position_y = y2 + y_increment * j;
+      unsigned int new_index = costmap_->getIndex(position_x / mPerCellX, position_y / mPerCellY);
+      if (new_index != prev_index)
+      {
+        double costOfStep = costmap_->getCost(new_index);
+        TotalCost += costOfStep;
+        if (costOfStep >= obstacleTH)
+        {
+          encoutered_obstacle = true;
+          break;
+        }
+      }
+      prev_index=new_index;
+    }
+    return TotalCost;
+  }
 
   nav_msgs::msg::Path rrtstar::createPlan(
       const geometry_msgs::msg::PoseStamped &start,
@@ -110,113 +138,82 @@ namespace nav2_rrtstar_planner
           global_frame_.c_str());
       return global_path;
     }
-    unsigned char obstacleTH = 255;
     global_path.poses.clear();
     global_path.header.stamp = node_->now();
     global_path.header.frame_id = global_frame_;
-    double widht = costmap_->getSizeInMetersX();
+    double width = costmap_->getSizeInMetersX();
     double height = costmap_->getSizeInMetersY();
-    int widht_cell = costmap_->getSizeInCellsX();
+    int width_cell = costmap_->getSizeInCellsX();
     int height_cell = costmap_->getSizeInCellsY();
     double orgX = costmap_->getOriginX();
     double orgY = costmap_->getOriginY();
-    unsigned char test_cost=255;
-    for(int i=0 ;i<height_cell;i++)
+    unsigned char test_cost = 255;
+    unsigned int minx = width_cell, miny = height_cell, maxx = 0, maxy = 0;
+    mPerCellX = width / width_cell;
+    mPerCellY = height / height_cell;
+
+    for (int i = 0; i < width_cell; i++)
     {
-      for(int j=0 ;j<widht_cell;j++)
+      for (int j = 0; j < height_cell; j++)
       {
-        unsigned char new_cost=costmap_->getCost(i,j);
-        if(test_cost>new_cost)
+        unsigned char cost = costmap_->getCost(i, j);
+        if (cost != 255)
         {
-          test_cost=new_cost;
+          if (i < minx)
+            minx = i;
+          if (j < miny)
+            miny = j;
+          if (i > maxx)
+            maxx = i;
+          if (j > maxy)
+            maxy = j;
         }
       }
     }
-    RCLCPP_INFO(node_->get_logger(),"test cost %u",test_cost);
-
-
-    //costmap_->saveMap("savedmap.pgm");
-    // int cesl_size=costmap_->getSizeInCellsX();
-    // RCLCPP_INFO(node_->get_logger(),"cell szie %d",cesl_size);
-    // RCLCPP_INFO(node_->get_logger(),"cell szie %f",widht);
-    // unsigned char* map=costmap_->getCharMap();
-    // int map_size =costmap_->getIndex(widht,height);
-    // RCLCPP_INFO(node_->get_logger(),"map size %d",map_size);
-    // unsigned char min=255,max=0;
-    // for(int i;i<147456+100;i++)
-    // {
-    //   unsigned char value=map[i];
-    //   if(value<min)
-    //   {
-    //     min=value;
-    //   }
-    //   if(max<value)
-    //   {
-    //     max=value;
-    //   }
-    // }
-    // RCLCPP_INFO(node_->get_logger(),"min %u max %u",min,max);
-
-    // std::cout<<"ite:"<<orgX<<"random:"<<orgY<<std::endl;
-    // std::cout<<"ite:"<<height+orgY<<"random:"<<widht+orgX<<std::endl;
-    //  std::random_device rd;
-    //  std::mt19937 gen(rd());
-    // std::uniform_real_distribution<> distr(widht+orgX,height+orgY);
+    std::uniform_real_distribution<double> unifX(minx * mPerCellX, maxx * mPerCellX);
+    std::uniform_real_distribution<double> unifY(miny * mPerCellY, maxy * mPerCellY);
+    std::default_random_engine re;
+    RCLCPP_INFO(node_->get_logger(), "minx: %u, minY%u, maxx:%u, maxy:%u", minx, miny, maxx, maxy);
     std::vector<Vertex> Verticies;
     Vertex Start(start.pose.position.x - orgX, start.pose.position.y - orgY, 0, -1);
-    // RCLCPP_INFO(node_->get_logger(),"Start addres %p",&Start);
-    // Vertex End(goal.pose.position.x-orgX,goal.pose.position.y-orgY,DBL_MAX,-1);
     Verticies.push_back(Start);
-    Vertex End(goal.pose.position.x - orgX, goal.pose.position.y - orgY, DBL_MAX, 0);
-    // RCLCPP_INFO(node_->get_logger(),"End addres %p",&Verticies[0]);
-    for (int i = 0; i < 1000; i++)
+    Vertex End(goal.pose.position.x - orgX, goal.pose.position.y - orgY, INT_MAX, -1);
+    //Vertex midPoint((Start.x+End.x)/2,(Start.y+End.y)/2,255,0);
+    //Verticies.push_back(midPoint);
+    // int Endidx = costmap_->getIndex(End.x / mPerCellX, End.y / mPerCellY);
+    // int EndCost=costmap_->getCost(Endidx);
+    // RCLCPP_INFO(node_->get_logger(), "End Indes: %d End Cost: %d",Endidx,EndCost);
+    bool encountered_obstacle=false;
+    int cost=costBeetweanPoints(Start.x,Start.y,End.x,End.y,encountered_obstacle);
+    RCLCPP_INFO(node_->get_logger(), "dist: %d obstacle: %d",cost,encountered_obstacle);
+    //RCLCPP_INFO(node_->get_logger(), "Generating points");
+    for (int i = 0; i < 10000; i++)
     {
-      float r1 = static_cast<int>(rand()) / (static_cast<int>(RAND_MAX / (height_cell)));
-      float r2 = static_cast<int>(rand()) / (static_cast<int>(RAND_MAX / (widht_cell)));
-      std::pair<double, double> point(r1, r2);
-      int idx = costmap_->getIndex(point.first, point.second);
-      
-      // std::cout<<"ite:"<<i<<"random:"<<r1<<std::endl;
-      // std::cout<<(int)costmap_->getCost(idx)<<std::endl;
-      //RCLCPP_INFO(node_->get_logger(),"cost %u",(int)costmap_->getCost(idx));
+      double rX = unifX(re);
+      double rY = unifY(re);
+     // RCLCPP_INFO(node_->get_logger(), "rX: %f, rY%f", rX, rY);
+      int idx = costmap_->getIndex(rX / mPerCellX, rY / mPerCellY);
       if (costmap_->getCost(idx) >= obstacleTH)
       {
         continue;
       }
-      double bestCost = DBL_MAX;
+      int bestCost = INT_MAX;
       int Closest = -1;
       int iter = 0;
       for (auto &element : Verticies)
       {
-
-        int total_number_of_loop = std::hypot(
-                                       element.x - point.first, element.y - point.second) /
-                                   interpolation_resolution_;
-        double x_increment = abs(element.x - point.first) / total_number_of_loop;
-        double y_increment = abs(element.y - point.second) / total_number_of_loop;
-        double costBeetweenPoints = 0;
-        bool eligible = true;
-        for (int j = 0; j < total_number_of_loop; ++j)
+        bool encountered_obstacle=false;
+        int cost=costBeetweanPoints(rX,rY,element.x,element.y,encountered_obstacle);
+        //RCLCPP_INFO(node_->get_logger(), "calculated cost %d",cost);
+        if(encountered_obstacle)
         {
-          double position_x = element.x + x_increment * j;
-          double position_y = element.y + y_increment * j;
-          // std::cout<<position_x<<"  "<<position_y<<std::endl;
-          double costOfStep = costmap_->getCost(costmap_->getIndex(position_x, position_y));
-          // std::cout<<"after cost"<<std::endl;
-          costBeetweenPoints += costOfStep;
-          if (costOfStep >= obstacleTH)
-          {
-            eligible = false;
-            break;
-          }
-        }
-        if (!eligible)
-        {
-          
+          iter++;
           continue;
         }
-        //RCLCPP_INFO(node_->get_logger(),"eligible");
-        double Totalcost = costBeetweenPoints + element.Cost;
+        //RCLCPP_INFO(node_->get_logger(), "past obstacle");
+        // RCLCPP_INFO(node_->get_logger(),"eligible");
+        double Totalcost = cost + element.Cost;
+        //RCLCPP_INFO(node_->get_logger(), "calculated cost %f",Totalcost);
         if (Totalcost < bestCost)
         {
           bestCost = Totalcost;
@@ -224,37 +221,18 @@ namespace nav2_rrtstar_planner
         }
         iter++;
       }
+      //RCLCPP_INFO(node_->get_logger(), "best cost %d", bestCost);
       if (Closest != -1)
       {
-        // RCLCPP_INFO(node_->get_logger(),"Current point %d",Closest);
-        Vertex NewVertex(point.first, point.second, bestCost, Closest);
-        // RCLCPP_INFO(node_->get_logger(),"Current point %p",&Verticies[Closest]);
-        //RCLCPP_INFO(node_->get_logger(),"new");
+        Vertex NewVertex(rX, rY, bestCost, Closest);
         Verticies.push_back(NewVertex);
-        int total_number_of_loop = std::hypot(
-                                       End.x - point.first, End.y - point.second) /
-                                   interpolation_resolution_;
-        double x_increment = (End.x - point.first) / total_number_of_loop;
-        double y_increment = (End.y - point.second) / total_number_of_loop;
-        double costBeetweenPoints = 0;
-        bool eligible = true;
-        for (int j = 0; j < total_number_of_loop; ++j)
-        {
-          double position_x = End.x + x_increment * j;
-          double position_y = End.y + y_increment * j;
-          double costOfStep = costmap_->getCost(costmap_->getIndex(position_x, position_y));
-          costBeetweenPoints += costOfStep;
-          if (costOfStep >= obstacleTH)
-          {
-            eligible = false;
-            break;
-          }
-        }
-        if (!eligible)
+        bool encountered_obstacle=false;
+        int cost=costBeetweanPoints(rX,rY,End.x,End.y,encountered_obstacle);
+        if (encountered_obstacle)
         {
           continue;
         }
-        double Totalcost = costBeetweenPoints + NewVertex.Cost;
+        double Totalcost = cost + NewVertex.Cost;
         if (Totalcost < End.Cost)
         {
           End.Parent = Verticies.size();
@@ -263,28 +241,28 @@ namespace nav2_rrtstar_planner
       }
     }
     // Vertex* currentPoint=&End;
-    int Curindx = End.Parent;
-    Vertex PrevElement = End;
-          RCLCPP_INFO(
-      node_->get_logger(), "len (%ld)",Verticies.size());
-    while (Curindx != -1)
+    Vertex CurElement = End;
+    RCLCPP_INFO(node_->get_logger(), "len (%ld)", Verticies.size());
+    //std::vector<int> path_idx;
+    int counter=0;
+    while (CurElement.Parent != -1)
     {
-      Vertex currentPoint = Verticies[Curindx];
+      //RCLCPP_INFO(node_->get_logger(), "path idx (%d)", CurElement.Parent);
+      Vertex nextElement=Verticies[CurElement.Parent];
       // RCLCPP_INFO(
       // node_->get_logger(), "idx (%d)",Curindx);
       int total_number_of_loop = std::hypot(
-                                     currentPoint.x - PrevElement.x,
-                                     currentPoint.y - PrevElement.y) /
-                                 interpolation_resolution_;
-      double x_increment = (currentPoint.x - PrevElement.x) / total_number_of_loop;
-      double y_increment = (currentPoint.y - PrevElement.y) / total_number_of_loop;
+                                     CurElement.x - nextElement.x,
+                                     CurElement.y - nextElement.y) /interpolation_resolution_;
+      double x_increment = (CurElement.x-nextElement.x) / total_number_of_loop;
+      double y_increment = (CurElement.y-nextElement.y) / total_number_of_loop;
 
       for (int i = 0; i < total_number_of_loop; ++i)
       {
         geometry_msgs::msg::PoseStamped pose;
         // RCLCPP_INFO(node_->get_logger(), "Poin (%f)",PrevElement.x + orgX + x_increment * i);
-        pose.pose.position.x = currentPoint.x + orgX - x_increment * i;
-        pose.pose.position.y = currentPoint.y + orgY - y_increment * i;
+        pose.pose.position.x = CurElement.x  +orgX+ x_increment * i;
+        pose.pose.position.y = CurElement.y  +orgY+ y_increment * i;
         pose.pose.position.z = 0.0;
         pose.pose.orientation.x = 0.0;
         pose.pose.orientation.y = 0.0;
@@ -293,9 +271,10 @@ namespace nav2_rrtstar_planner
         pose.header.stamp = node_->now();
         pose.header.frame_id = global_frame_;
         global_path.poses.push_back(pose);
-        PrevElement = currentPoint;
-        Curindx = currentPoint.Parent;
+        CurElement = nextElement;
       }
+      RCLCPP_INFO(node_->get_logger(), "Counter (%d)", counter);
+      counter++;
     }
     return global_path;
   }

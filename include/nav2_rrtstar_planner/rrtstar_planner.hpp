@@ -60,7 +60,7 @@ namespace nav2_rrtstar_planner
 {
 
   public:
-    Vertex(double x_in, double y_in,double cost,int Par)
+    Vertex(double x_in, double y_in,int cost,int Par)
     {
       x=x_in;
       y=y_in;
@@ -94,7 +94,7 @@ public:
 
   // plugin deactivate
   void deactivate() override;
-
+  
   // This method creates path for given start and goal pose.
   nav_msgs::msg::Path createPlan(
     const geometry_msgs::msg::PoseStamped & start,
@@ -114,8 +114,10 @@ private:
   std::string global_frame_, name_;
 
   double interpolation_resolution_;
-  std::random_device rd;
-  std::mt19937 gen;
+  double mPerCellX;
+  double mPerCellY;
+  unsigned char obstacleTH = 220;
+  int costBeetweanPoints(double x1,double y1,double x2,double y2,bool &encoutered_obstacle);
 };
 
 }  // namespace nav2_straightline_planner
