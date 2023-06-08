@@ -87,6 +87,7 @@ namespace nav2_rrtstar_planner
         node_->get_logger(), "Deactivating plugin %s of type NavfnPlanner",
         name_.c_str());
   }
+  //int rrtstar::costBeetweanPoints(double x1, double y1, double x2, double y2, bool &encoutered_obstacle,double last_leaglX,double last_leaglY)
   int rrtstar::costBeetweanPoints(double x1, double y1, double x2, double y2, bool &encoutered_obstacle)
   {
     int total_number_of_loop = std::hypot(
@@ -107,6 +108,8 @@ namespace nav2_rrtstar_planner
         TotalCost += costOfStep;
         if (costOfStep >= obstacleTH)
         {
+          // last_leaglX=position_x;
+          // last_leaglY=position_y;
           encoutered_obstacle = true;
           break;
         }
@@ -131,13 +134,6 @@ namespace nav2_rrtstar_planner
       return global_path;
     }
 
-    if (goal.header.frame_id != global_frame_)
-    {
-      RCLCPP_INFO(
-          node_->get_logger(), "Planner will only except goal position from %s frame",
-          global_frame_.c_str());
-      return global_path;
-    }
     global_path.poses.clear();
     global_path.header.stamp = node_->now();
     global_path.header.frame_id = global_frame_;
@@ -183,11 +179,11 @@ namespace nav2_rrtstar_planner
     // int Endidx = costmap_->getIndex(End.x / mPerCellX, End.y / mPerCellY);
     // int EndCost=costmap_->getCost(Endidx);
     // RCLCPP_INFO(node_->get_logger(), "End Indes: %d End Cost: %d",Endidx,EndCost);
-    bool encountered_obstacle=false;
-    int cost=costBeetweanPoints(Start.x,Start.y,End.x,End.y,encountered_obstacle);
-    RCLCPP_INFO(node_->get_logger(), "dist: %d obstacle: %d",cost,encountered_obstacle);
+    // bool encountered_obstacle=false;
+    // int cost=costBeetweanPoints(Start.x,Start.y,End.x,End.y,encountered_obstacle);
+    // RCLCPP_INFO(node_->get_logger(), "dist: %d obstacle: %d",cost,encountered_obstacle);
     //RCLCPP_INFO(node_->get_logger(), "Generating points");
-    for (int i = 0; i < 10000; i++)
+    for (int i = 0; i < 1000; i++)
     {
       double rX = unifX(re);
       double rY = unifY(re);
@@ -210,10 +206,7 @@ namespace nav2_rrtstar_planner
           iter++;
           continue;
         }
-        //RCLCPP_INFO(node_->get_logger(), "past obstacle");
-        // RCLCPP_INFO(node_->get_logger(),"eligible");
         double Totalcost = cost + element.Cost;
-        //RCLCPP_INFO(node_->get_logger(), "calculated cost %f",Totalcost);
         if (Totalcost < bestCost)
         {
           bestCost = Totalcost;
@@ -221,7 +214,6 @@ namespace nav2_rrtstar_planner
         }
         iter++;
       }
-      //RCLCPP_INFO(node_->get_logger(), "best cost %d", bestCost);
       if (Closest != -1)
       {
         Vertex NewVertex(rX, rY, bestCost, Closest);
@@ -235,7 +227,7 @@ namespace nav2_rrtstar_planner
         double Totalcost = cost + NewVertex.Cost;
         if (Totalcost < End.Cost)
         {
-          End.Parent = Verticies.size();
+          End.Parent = Verticies.size()-1;
           End.Cost = Totalcost;
         }
       }
@@ -243,10 +235,11 @@ namespace nav2_rrtstar_planner
     // Vertex* currentPoint=&End;
     Vertex CurElement = End;
     RCLCPP_INFO(node_->get_logger(), "len (%ld)", Verticies.size());
-    //std::vector<int> path_idx;
+    std::vector<int> path_idx;
     int counter=0;
     while (CurElement.Parent != -1)
     {
+      path_idx.push_back(CurElement.Parent);
       //RCLCPP_INFO(node_->get_logger(), "path idx (%d)", CurElement.Parent);
       Vertex nextElement=Verticies[CurElement.Parent];
       // RCLCPP_INFO(
@@ -256,13 +249,14 @@ namespace nav2_rrtstar_planner
                                      CurElement.y - nextElement.y) /interpolation_resolution_;
       double x_increment = (CurElement.x-nextElement.x) / total_number_of_loop;
       double y_increment = (CurElement.y-nextElement.y) / total_number_of_loop;
-
+      RCLCPP_INFO(node_->get_logger(), "Incrementx %f Incrementy %f loops %d",x_increment ,y_increment,total_number_of_loop);
       for (int i = 0; i < total_number_of_loop; ++i)
       {
         geometry_msgs::msg::PoseStamped pose;
         // RCLCPP_INFO(node_->get_logger(), "Poin (%f)",PrevElement.x + orgX + x_increment * i);
-        pose.pose.position.x = CurElement.x  +orgX+ x_increment * i;
-        pose.pose.position.y = CurElement.y  +orgY+ y_increment * i;
+        pose.pose.position.x = CurElement.x + orgX - x_increment * i;
+        RCLCPP_INFO(node_->get_logger(), "positionx %f positiony %f",nextElement.x + orgX + x_increment * i ,nextElement.y + orgY + y_increment * i);
+        pose.pose.position.y = CurElement.y + orgY - y_increment * i;
         pose.pose.position.z = 0.0;
         pose.pose.orientation.x = 0.0;
         pose.pose.orientation.y = 0.0;
@@ -271,11 +265,18 @@ namespace nav2_rrtstar_planner
         pose.header.stamp = node_->now();
         pose.header.frame_id = global_frame_;
         global_path.poses.push_back(pose);
-        CurElement = nextElement;
       }
-      RCLCPP_INFO(node_->get_logger(), "Counter (%d)", counter);
+      CurElement = nextElement;
+      //RCLCPP_INFO(node_->get_logger(), "Counter (%d)", counter);
       counter++;
     }
+    //path_idx.push_back(CurElement.Parent);
+    for (auto &element : path_idx)
+    {
+      Vertex Point=Verticies[element];
+      RCLCPP_INFO(node_->get_logger(), "Path (%d) X:%f Y:%f", element,Point.x+orgX,Point.y+orgY);
+    }
+    std::reverse(global_path.poses.begin(),global_path.poses.end());
     return global_path;
   }
 

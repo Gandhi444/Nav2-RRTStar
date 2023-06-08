@@ -117,7 +117,8 @@ private:
   double mPerCellX;
   double mPerCellY;
   unsigned char obstacleTH = 220;
-  int costBeetweanPoints(double x1,double y1,double x2,double y2,bool &encoutered_obstacle);
+  //int costBeetweanPoints(double x1, double y1, double x2, double y2, bool &encoutered_obstacle,double last_leaglX,double last_leaglY);
+  int costBeetweanPoints(double x1, double y1, double x2, double y2, bool &encoutered_obstacle);
 };
 
 }  // namespace nav2_straightline_planner
