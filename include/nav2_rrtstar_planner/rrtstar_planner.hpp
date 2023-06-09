@@ -117,6 +117,7 @@ private:
   double mPerCellX;
   double mPerCellY;
   unsigned char obstacleTH = 240;
+  double step=0.3;
   nav_msgs::msg::Path prev_path;
   //int costBeetweanPoints(double x1, double y1, double x2, double y2, bool &encoutered_obstacle,double last_leaglX,double last_leaglY);
   double costBeetweanPoints(double x1, double y1, double x2, double y2, bool &encoutered_obstacle,unsigned char obstacle);

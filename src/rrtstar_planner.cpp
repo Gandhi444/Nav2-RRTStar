@@ -178,6 +178,10 @@ namespace nav2_rrtstar_planner
     // }
     std::uniform_real_distribution<double> unifX(minx * mPerCellX, maxx * mPerCellX);
     std::uniform_real_distribution<double> unifY(miny * mPerCellY, maxy * mPerCellY);
+    // std::default_random_engine reX;
+    // reX.seed(node_->now().nanoseconds());
+    // std::default_random_engine reY;
+    // reY.seed(node_->now().nanoseconds()+1);
     std::default_random_engine re;
     //RCLCPP_INFO(node_->get_logger(), "minx: %u, minY%u, maxx:%u, maxy:%u", minx, miny, maxx, maxy);
     std::vector<Vertex> Verticies;
@@ -192,12 +196,13 @@ namespace nav2_rrtstar_planner
     // bool encountered_obstacle=false;
     // int cost=costBeetweanPoints(Start.x,Start.y,End.x,End.y,encountered_obstacle);
     // RCLCPP_INFO(node_->get_logger(), "dist: %d obstacle: %d",cost,encountered_obstacle);
-    //RCLCPP_INFO(node_->get_logger(), "Generating points");
-    for (int i = 0; i < 10000; i++)
+    RCLCPP_INFO(node_->get_logger(), "Generating points");
+    for (int i = 0; i < 50000; i++)
     {
+      //RCLCPP_INFO(node_->get_logger(), "Random points");
       double rX = unifX(re);
       double rY = unifY(re);
-     // RCLCPP_INFO(node_->get_logger(), "rX: %f, rY%f", rX, rY);
+      //RCLCPP_INFO(node_->get_logger(), "rX: %f, rY%f", rX, rY);
       int idx = costmap_->getIndex(rX / mPerCellX, rY / mPerCellY);
       if (costmap_->getCost(idx) >= obstacleTH)
       {
@@ -207,10 +212,29 @@ namespace nav2_rrtstar_planner
       // int Closest = -1;
       int iter = 0;
       std::vector<std::pair<double,int>> bestNeighbours;
+      //RCLCPP_INFO(node_->get_logger(), "Closest points");
       for (auto &element : Verticies)
       {
+        double newX;
+        double newY;
+        double dist=std::hypot(rX-element.x,rY-element.y);
         bool encountered_obstacle=false;
-        double cost=costBeetweanPoints(rX,rY,element.x,element.y,encountered_obstacle,obstacleTH);
+        double t=step/dist;
+        if(dist>step)
+        {
+        newX=element.x-t*(element.x-rX);
+        newY=element.y-t*(element.y-rY);
+        }else
+        {
+          newX=rX;
+          newY=rY;
+        }
+        // RCLCPP_INFO(node_->get_logger(), "dist %f step %f",dist,t);
+        // RCLCPP_INFO(node_->get_logger(), "rX %f, rY %f",rX,rY);
+        // RCLCPP_INFO(node_->get_logger(), "elemX %f, elemY %f",element.x,element.y);
+        // RCLCPP_INFO(node_->get_logger(), "X %f, Y %f",newX,newY);
+        
+        double cost=costBeetweanPoints(newX,newY,element.x,element.y,encountered_obstacle,obstacleTH);
         //RCLCPP_INFO(node_->get_logger(), "calculated cost %d",cost);
         if(encountered_obstacle)
         {
@@ -218,16 +242,18 @@ namespace nav2_rrtstar_planner
           continue;
         }
         double Totalcost = cost + element.Cost;
+        //RCLCPP_INFO(node_->get_logger(), "before KNN");
         if (bestNeighbours.size()<KNeig)
         {
           bestNeighbours.push_back(std::pair<double,int>(Totalcost,iter));
           
-        }else if(Totalcost<bestNeighbours[KNeig].first)
+        }else if(Totalcost<bestNeighbours.back().first)
         {
           bestNeighbours.pop_back();
           bestNeighbours.push_back(std::pair<double,int>(Totalcost,iter));
           sort(bestNeighbours.rbegin(),bestNeighbours.rend());
         }
+        //RCLCPP_INFO(node_->get_logger(), "after KNN");
         // if (Totalcost < bestCost)
         // {
         //   bestCost = Totalcost;
@@ -235,8 +261,17 @@ namespace nav2_rrtstar_planner
         // }
         iter++;
       }
+      //RCLCPP_INFO(node_->get_logger(), "New vert");
       if (bestNeighbours.size()!=0)
       {
+        Vertex Closest=Verticies[bestNeighbours[0].second];
+        double dist=std::hypot(rX-Closest.x,rY-Closest.y);
+        if(dist>step)
+        {
+        double t=step/dist;
+        rX=Closest.x-t*(Closest.x-rX);
+        rY=Closest.y-t*(Closest.y-rY);
+        }
         Vertex NewVertex(rX, rY, bestNeighbours[0].first, bestNeighbours[0].second);
         Verticies.push_back(NewVertex);
         bestNeighbours.erase(bestNeighbours.begin());
@@ -259,6 +294,7 @@ namespace nav2_rrtstar_planner
         }
       }
     }
+    //RCLCPP_INFO(node_->get_logger(), "After Generating points");
     for(int i=0; i<Verticies.size();i++)
     {
        Vertex currentVert=Verticies[i];
