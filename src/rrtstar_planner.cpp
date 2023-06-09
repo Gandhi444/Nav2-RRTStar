@@ -88,14 +88,14 @@ namespace nav2_rrtstar_planner
         name_.c_str());
   }
   //int rrtstar::costBeetweanPoints(double x1, double y1, double x2, double y2, bool &encoutered_obstacle,double last_leaglX,double last_leaglY)
-  int rrtstar::costBeetweanPoints(double x1, double y1, double x2, double y2, bool &encoutered_obstacle)
+  double rrtstar::costBeetweanPoints(double x1, double y1, double x2, double y2, bool &encoutered_obstacle,unsigned char obstacle)
   {
     int total_number_of_loop = std::hypot(
                                    x1 - x2, y1 - y2) /
                                interpolation_resolution_;
     double x_increment = (x1 - x2) / total_number_of_loop;
     double y_increment = (y1 - y2) / total_number_of_loop;
-    double TotalCost = 0;
+    double TotalCost = std::hypot(x1 - x2, y1 - y2)*10;
     unsigned int prev_index = UINT_MAX;
     for (int j = 0; j < total_number_of_loop; ++j)
     {
@@ -105,8 +105,8 @@ namespace nav2_rrtstar_planner
       if (new_index != prev_index)
       {
         double costOfStep = costmap_->getCost(new_index);
-        TotalCost += costOfStep;
-        if (costOfStep >= obstacleTH)
+        TotalCost += costOfStep/255.0;
+        if (costOfStep >= obstacle)
         {
           // last_leaglX=position_x;
           // last_leaglY=position_y;
@@ -147,7 +147,7 @@ namespace nav2_rrtstar_planner
     unsigned int minx = width_cell, miny = height_cell, maxx = 0, maxy = 0;
     mPerCellX = width / width_cell;
     mPerCellY = height / height_cell;
-    int KNeig=5;
+    int KNeig=15;
     for (int i = 0; i < width_cell; i++)
     {
       for (int j = 0; j < height_cell; j++)
@@ -166,6 +166,16 @@ namespace nav2_rrtstar_planner
         }
       }
     }
+    if(costmap_->getCost(costmap_->getIndex((goal.pose.position.x - orgX)/ mPerCellX, (goal.pose.position.y-orgY) / mPerCellY)) >= obstacleTH)
+    {
+      RCLCPP_ERROR(
+          node_->get_logger(), "Goal inside obstacle");
+      return global_path;
+    }
+    // if(costmap_->getCost(costmap_->getIndex((start.pose.position.x - orgX)/ mPerCellX, (start.pose.position.y-orgY) / mPerCellY)) >= obstacleTH)
+    // {
+    //   return prev_path;
+    // }
     std::uniform_real_distribution<double> unifX(minx * mPerCellX, maxx * mPerCellX);
     std::uniform_real_distribution<double> unifY(miny * mPerCellY, maxy * mPerCellY);
     std::default_random_engine re;
@@ -182,7 +192,7 @@ namespace nav2_rrtstar_planner
     // bool encountered_obstacle=false;
     // int cost=costBeetweanPoints(Start.x,Start.y,End.x,End.y,encountered_obstacle);
     // RCLCPP_INFO(node_->get_logger(), "dist: %d obstacle: %d",cost,encountered_obstacle);
-    //RCLCPP_INFO(node_->get_logger(), "Generating points");
+    RCLCPP_INFO(node_->get_logger(), "Generating points");
     for (int i = 0; i < 10000; i++)
     {
       double rX = unifX(re);
@@ -196,11 +206,11 @@ namespace nav2_rrtstar_planner
       // int bestCost = INT_MAX;
       // int Closest = -1;
       int iter = 0;
-      std::vector<std::pair<int,int>> bestNeighbours;
+      std::vector<std::pair<double,int>> bestNeighbours;
       for (auto &element : Verticies)
       {
         bool encountered_obstacle=false;
-        int cost=costBeetweanPoints(rX,rY,element.x,element.y,encountered_obstacle);
+        double cost=costBeetweanPoints(rX,rY,element.x,element.y,encountered_obstacle,obstacleTH);
         //RCLCPP_INFO(node_->get_logger(), "calculated cost %d",cost);
         if(encountered_obstacle)
         {
@@ -210,12 +220,12 @@ namespace nav2_rrtstar_planner
         double Totalcost = cost + element.Cost;
         if (bestNeighbours.size()<KNeig)
         {
-          bestNeighbours.push_back(std::pair<int,int>(Totalcost,iter));
+          bestNeighbours.push_back(std::pair<double,int>(Totalcost,iter));
           
         }else if(Totalcost<bestNeighbours[KNeig].first)
         {
           bestNeighbours.pop_back();
-          bestNeighbours.push_back(std::pair<int,int>(Totalcost,iter));
+          bestNeighbours.push_back(std::pair<double,int>(Totalcost,iter));
           sort(bestNeighbours.rbegin(),bestNeighbours.rend());
         }
         // if (Totalcost < bestCost)
@@ -230,29 +240,30 @@ namespace nav2_rrtstar_planner
         Vertex NewVertex(rX, rY, bestNeighbours[0].first, bestNeighbours[0].second);
         Verticies.push_back(NewVertex);
         bestNeighbours.erase(bestNeighbours.begin());
-        // for(auto &pair : bestNeighbours)
-        // {
-        //   Vertex currentVert=Verticies[pair.second];
-        //   bool encountered_obstacle=false;
-        //   int cost=costBeetweanPoints(rX,rY,currentVert.x,currentVert.y,encountered_obstacle);
-        //   if(encountered_obstacle)
-        //   {
-        //   continue;
-        //   }
-        //   double Totalcost = cost + NewVertex.Cost;
-        //   if(currentVert.Cost<Totalcost)
-        //   {
-        //     Verticies[pair.second].Cost=Totalcost;
-        //     Verticies[pair.second].Parent=Verticies.size()-1;
-        //   }
-        // }
+        for(auto &pair : bestNeighbours)
+        {
+          Vertex currentVert=Verticies[pair.second];
+          if(currentVert.Parent==-1) continue;
+          bool encountered_obstacle=false;
+          double cost=costBeetweanPoints(rX,rY,currentVert.x,currentVert.y,encountered_obstacle,obstacleTH);
+          if(encountered_obstacle)
+          {
+          continue;
+          }
+          double Totalcost = cost + NewVertex.Cost;
+          if(currentVert.Cost<Totalcost)
+          {
+            Verticies[pair.second].Cost=Totalcost;
+            Verticies[pair.second].Parent=Verticies.size()-1;
+          }
+        }
       }
     }
     for(int i=0; i<Verticies.size();i++)
     {
        Vertex currentVert=Verticies[i];
        bool encountered_obstacle=false;
-       int cost=costBeetweanPoints(currentVert.x,currentVert.y,End.x,End.y,encountered_obstacle);
+       double cost=costBeetweanPoints(currentVert.x,currentVert.y,End.x,End.y,encountered_obstacle,254);
         if (encountered_obstacle)
         {
           continue;
@@ -275,8 +286,8 @@ namespace nav2_rrtstar_planner
       path_idx.push_back(CurElement.Parent);
       //RCLCPP_INFO(node_->get_logger(), "path idx (%d)", CurElement.Parent);
       Vertex nextElement=Verticies[CurElement.Parent];
-      // RCLCPP_INFO(
-      // node_->get_logger(), "idx (%d)",Curindx);
+      RCLCPP_INFO(
+      node_->get_logger(), "idx (%d)",CurElement.Parent);
       int total_number_of_loop = std::hypot(
                                      CurElement.x - nextElement.x,
                                      CurElement.y - nextElement.y) /interpolation_resolution_;
@@ -286,7 +297,7 @@ namespace nav2_rrtstar_planner
       for (int i = 0; i < total_number_of_loop; ++i)
       {
         geometry_msgs::msg::PoseStamped pose;
-        // RCLCPP_INFO(node_->get_logger(), "Poin (%f)",PrevElement.x + orgX + x_increment * i);
+        //RCLCPP_INFO(node_->get_logger(), "Poin (%f)",PrevElement.x + orgX + x_increment * i);
         pose.pose.position.x = CurElement.x + orgX - x_increment * i;
         //RCLCPP_INFO(node_->get_logger(), "positionx %f positiony %f",nextElement.x + orgX + x_increment * i ,nextElement.y + orgY + y_increment * i);
         pose.pose.position.y = CurElement.y + orgY - y_increment * i;
@@ -301,8 +312,13 @@ namespace nav2_rrtstar_planner
       }
       CurElement = nextElement;
       counter++;
+      if(counter>Verticies.size())
+      {
+        break;
+      }
     }
     std::reverse(global_path.poses.begin(),global_path.poses.end());
+    prev_path=global_path;
     return global_path;
   }
 

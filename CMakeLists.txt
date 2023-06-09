@@ -67,11 +67,16 @@ install(TARGETS ${library_name}
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
-install(DIRECTORY include/
+install(DIRECTORY include/ 
   DESTINATION include/
 )
 
-install(FILES global_planner_plugin.xml
+install(FILES global_planner_plugin.xml 
+  DESTINATION share/${PROJECT_NAME}
+)
+
+install(
+  DIRECTORY launch maps params rviz
   DESTINATION share/${PROJECT_NAME}
 )
 

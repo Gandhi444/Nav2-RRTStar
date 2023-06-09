@@ -60,7 +60,7 @@ namespace nav2_rrtstar_planner
 {
 
   public:
-    Vertex(double x_in, double y_in,int cost,int Par)
+    Vertex(double x_in, double y_in,double cost,int Par)
     {
       x=x_in;
       y=y_in;
@@ -116,9 +116,10 @@ private:
   double interpolation_resolution_;
   double mPerCellX;
   double mPerCellY;
-  unsigned char obstacleTH = 220;
+  unsigned char obstacleTH = 240;
+  nav_msgs::msg::Path prev_path;
   //int costBeetweanPoints(double x1, double y1, double x2, double y2, bool &encoutered_obstacle,double last_leaglX,double last_leaglY);
-  int costBeetweanPoints(double x1, double y1, double x2, double y2, bool &encoutered_obstacle);
+  double costBeetweanPoints(double x1, double y1, double x2, double y2, bool &encoutered_obstacle,unsigned char obstacle);
 };
 
 }  // namespace nav2_straightline_planner

@@ -23,7 +23,9 @@
   <depend>nav2_costmap_2d</depend>
   <depend>nav2_core</depend>
   <depend>pluginlib</depend>
-
+  <depend>navigation2</depend>
+  <depend>nav2_bringup</depend>
+  <depend>turtlebot3_gazebo</depend>
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 
