@@ -178,6 +178,8 @@ namespace nav2_rrtstar_planner
     // }
     std::uniform_real_distribution<double> unifX(minx * mPerCellX, maxx * mPerCellX);
     std::uniform_real_distribution<double> unifY(miny * mPerCellY, maxy * mPerCellY);
+    double step=std::abs(static_cast<double>(-minx+maxx-miny+maxx))/100.0;
+    RCLCPP_ERROR(node_->get_logger(), "step%f",step);
     // std::default_random_engine reX;
     // reX.seed(node_->now().nanoseconds());
     // std::default_random_engine reY;
@@ -197,7 +199,7 @@ namespace nav2_rrtstar_planner
     // int cost=costBeetweanPoints(Start.x,Start.y,End.x,End.y,encountered_obstacle);
     // RCLCPP_INFO(node_->get_logger(), "dist: %d obstacle: %d",cost,encountered_obstacle);
     RCLCPP_INFO(node_->get_logger(), "Generating points");
-    for (int i = 0; i < 50000; i++)
+    for (int i = 0; i < 10000; i++)
     {
       //RCLCPP_INFO(node_->get_logger(), "Random points");
       double rX = unifX(re);
