@@ -179,7 +179,7 @@ namespace nav2_rrtstar_planner
     std::uniform_real_distribution<double> unifX(minx * mPerCellX, maxx * mPerCellX);
     std::uniform_real_distribution<double> unifY(miny * mPerCellY, maxy * mPerCellY);
     std::default_random_engine re;
-    RCLCPP_INFO(node_->get_logger(), "minx: %u, minY%u, maxx:%u, maxy:%u", minx, miny, maxx, maxy);
+    //RCLCPP_INFO(node_->get_logger(), "minx: %u, minY%u, maxx:%u, maxy:%u", minx, miny, maxx, maxy);
     std::vector<Vertex> Verticies;
     Vertex Start(start.pose.position.x - orgX, start.pose.position.y - orgY, 0, -1);
     Verticies.push_back(Start);
@@ -192,7 +192,7 @@ namespace nav2_rrtstar_planner
     // bool encountered_obstacle=false;
     // int cost=costBeetweanPoints(Start.x,Start.y,End.x,End.y,encountered_obstacle);
     // RCLCPP_INFO(node_->get_logger(), "dist: %d obstacle: %d",cost,encountered_obstacle);
-    RCLCPP_INFO(node_->get_logger(), "Generating points");
+    //RCLCPP_INFO(node_->get_logger(), "Generating points");
     for (int i = 0; i < 10000; i++)
     {
       double rX = unifX(re);
@@ -251,7 +251,7 @@ namespace nav2_rrtstar_planner
           continue;
           }
           double Totalcost = cost + NewVertex.Cost;
-          if(currentVert.Cost<Totalcost)
+          if(currentVert.Cost>Totalcost)
           {
             Verticies[pair.second].Cost=Totalcost;
             Verticies[pair.second].Parent=Verticies.size()-1;
@@ -263,7 +263,7 @@ namespace nav2_rrtstar_planner
     {
        Vertex currentVert=Verticies[i];
        bool encountered_obstacle=false;
-       double cost=costBeetweanPoints(currentVert.x,currentVert.y,End.x,End.y,encountered_obstacle,254);
+       double cost=costBeetweanPoints(currentVert.x,currentVert.y,End.x,End.y,encountered_obstacle,obstacleTH);
         if (encountered_obstacle)
         {
           continue;
@@ -286,8 +286,8 @@ namespace nav2_rrtstar_planner
       path_idx.push_back(CurElement.Parent);
       //RCLCPP_INFO(node_->get_logger(), "path idx (%d)", CurElement.Parent);
       Vertex nextElement=Verticies[CurElement.Parent];
-      RCLCPP_INFO(
-      node_->get_logger(), "idx (%d)",CurElement.Parent);
+      // RCLCPP_INFO(
+      // node_->get_logger(), "idx (%d)",CurElement.Parent);
       int total_number_of_loop = std::hypot(
                                      CurElement.x - nextElement.x,
                                      CurElement.y - nextElement.y) /interpolation_resolution_;
