@@ -1,5 +1,5 @@
 # Nav2-RRTStar
-Implementation of RRT* algorithm in Nav2 for ros2 humble. Implementation is using naive aproach to look for nearest neighbours so it is very slow with big number of nodes or big maps. It was written as a way of geting familiar with Nav2. Should not be used in any serious aplication.
+Implementation of RRT* algorithm in Nav2 for ros2 humble. Implementation is using naive aproach to look for nearest neighbours so it is very slow with big number of nodes or big maps. It was written as a way of getting familiar with Nav2. Should not be used in any serious aplication.
 ## Runnig examples
 ### Required:
 1. navigation2
